@@ -1,1 +1,0 @@
-wrapHTML = "<html><body>"
