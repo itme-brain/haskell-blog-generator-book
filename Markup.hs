@@ -4,9 +4,11 @@
 module Markup
   ( Document,
     Structure (..),
+    parse,
   )
 where
 
+import Data.Maybe (maybeToList)
 import Numeric.Natural
 
 type Document = [Structure]
@@ -17,7 +19,14 @@ data Structure
   | UnorderedList [String]
   | OrderedList [String]
   | CodeBlock [String]
-  deriving (Show)
+  deriving (Eq, Show)
+
+data Context
+  = CtxHeading Natural String
+  | CtxParagraph [String]
+  | CtxUnorderedList [String]
+  | CtxOrderedList [String]
+  | CtxCodeBlock [String]
 
 replicate' :: Int -> a -> [a]
 replicate' n x =
@@ -38,17 +47,39 @@ odd' n =
     else even' (n - 1)
 
 parse :: String -> Document
-parse = parseLines [] . lines -- (1)
+parse = parseLines Nothing . lines -- (1)
 
-parseLines :: [String] -> [String] -> Document
-parseLines currentParagraph txts =
-  let paragraph = Paragraph (unlines (reverse currentParagraph)) -- (2), (3)
-   in case txts of -- (4)
-        [] -> [paragraph]
-        currentLine : rest ->
-          if trim currentLine == ""
-            then paragraph : parseLines [] rest -- (5)
-            else parseLines (currentLine : currentParagraph) rest -- (6)
+parseLines :: Maybe Structure -> [String] -> Document
+parseLines context txts =
+  case txts of
+    [] -> maybeToList context
+    ('*' : ' ' : line) : rest ->
+      maybe id (:) context (Heading 1 (trim line) : parseLines Nothing rest)
+    ('-' : ' ' : line) : rest ->
+      case context of
+        Just (UnorderedList list) ->
+          parseLines (Just (UnorderedList (list <> [trim line]))) rest
+        _ ->
+          maybe id (:) context (parseLines (Just (UnorderedList [trim line])) rest)
+    ('#' : ' ' : line) : rest ->
+      case context of
+        Just (OrderedList list) ->
+          parseLines (Just (OrderedList (list <> [trim line]))) rest
+        _ ->
+          maybe id (:) context (parseLines (Just (OrderedList [trim line])) rest)
+    ('>' : ' ' : line) : rest ->
+      case context of
+        Just (CodeBlock list) ->
+          parseLines (Just (CodeBlock (list <> [trim line]))) rest
+        _ ->
+          maybe id (:) context (parseLines (Just (CodeBlock [trim line])) rest)
+    currentLine : rest ->
+      let line = trim currentLine
+       in if line == ""
+            then maybe id (:) context (parseLines Nothing rest)
+            else case context of
+              Nothing -> parseLines Nothing rest
+              Just structure -> structure : parseLines Nothing rest
 
 trim :: String -> String
 trim = unwords . words
