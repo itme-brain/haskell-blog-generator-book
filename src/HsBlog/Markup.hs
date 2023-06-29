@@ -1,7 +1,7 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 
 {-# HLINT ignore "Redundant if" #-}
-module Markup
+module HsBlog.Markup
   ( Document,
     Structure (..),
     parse,
