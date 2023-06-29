@@ -1,6 +1,6 @@
 module Main where
 
-import HsBlog qualified
+import qualified HsBlog
 
 main :: IO ()
 main = HsBlog.main
