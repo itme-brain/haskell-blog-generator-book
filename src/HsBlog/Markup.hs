@@ -1,6 +1,3 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Redundant if" #-}
 module HsBlog.Markup
   ( Document,
     Structure (..),
@@ -20,13 +17,6 @@ data Structure
   | OrderedList [String]
   | CodeBlock [String]
   deriving (Eq, Show)
-
--- data Context
---   = CtxHeading Natural String
---   | CtxParagraph [String]
---   | CtxUnorderedList [String]
---   | CtxOrderedList [String]
---   | CtxCodeBlock [String]
 
 parse :: String -> Document
 parse = parseLines Nothing . lines -- (1)

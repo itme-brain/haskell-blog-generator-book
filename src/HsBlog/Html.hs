@@ -7,8 +7,13 @@ module HsBlog.Html
     h_,
     ul_,
     ol_,
-    empty_,
     code_,
+    Content,
+    txt_,
+    img_,
+    link_,
+    b_,
+    i_,
     render,
   )
 where
