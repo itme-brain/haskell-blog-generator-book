@@ -76,14 +76,14 @@ data DirContents = DirContents
 
 -- * Build index page
 
-buildIndex :: [(FilePath, Markup.Document)] -> Html.Html
-buildIndex files =
+buildIndex :: Env -> [(FilePath, Markup.Document)] -> Html.Html
+buildIndex env files =
   let previews =
         map
           ( \(file, doc) ->
               case doc of
-                Markup.Heading 1 heading : article ->
-                  Html.h_ 3 (Html.link_ file (Html.txt_ heading))
+                Markup.Head 1 head : article ->
+                  Html.h_ 3 (Html.link_ file (Html.txt_ head))
                     <> foldMap convertStructure (take 2 article)
                     <> Html.p_ (Html.link_ file (Html.txt_ "..."))
                 _ ->
@@ -91,7 +91,9 @@ buildIndex files =
           )
           files
    in Html.html_
-        "Blog"
+        ( Html.title_ (eBlogName env)
+            <> Html.stylesheet_ (eStylesheetPath env)
+        )
         ( Html.h_ 1 (Html.link_ "index.html" (Html.txt_ "Blog"))
             <> Html.h_ 2 (Html.txt_ "Posts")
             <> mconcat previews
@@ -109,7 +111,8 @@ txtsToRenderedHtml txtFiles =
    in map (fmap Html.render) (index : map convertFile txtOutputFiles)
 
 toOutputMarkupFile :: (FilePath, String) -> (FilePath, Markup.Document)
-toOutputMarkupFile (file, content) =
+
+tOutputMarkupFile (file, content) =
   (takeBaseName file <.> "html", Markup.parse content)
 
 convertFile :: (FilePath, Markup.Document) -> (FilePath, Html.Html)

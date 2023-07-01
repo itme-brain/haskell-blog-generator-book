@@ -1,5 +1,9 @@
 module HsBlog.Html
   ( Html,
+    Head,
+    title_,
+    stylesheet_,
+    meta_,
     Title,
     Structure,
     html_,
@@ -19,3 +23,4 @@ module HsBlog.Html
 where
 
 import HsBlog.Html.Internal
+import Prelude hiding (head)
