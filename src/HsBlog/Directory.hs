@@ -1,6 +1,4 @@
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-
-{-# HLINT ignore "Use when" #-}
+-- src/HsBlog/Directory.hs
 
 -- | Process multiple files and convert directories
 module HsBlog.Directory
@@ -11,9 +9,11 @@ where
 
 import Control.Exception (SomeException (..), catch, displayException)
 import Control.Monad (void, when)
+import Control.Monad.Reader (Reader, ask, runReader)
 import Data.List (partition)
 import Data.Traversable (for)
 import HsBlog.Convert (convert, convertStructure)
+import HsBlog.Env (Env (..))
 import qualified HsBlog.Html as Html
 import qualified HsBlog.Markup as Markup
 import System.Directory
@@ -37,11 +37,11 @@ import System.IO (hPutStrLn, stderr)
 --   '.html' files in the process. Recording unsuccessful reads and writes to stderr.
 --
 -- May throw an exception on output directory creation.
-convertDirectory :: FilePath -> FilePath -> IO ()
-convertDirectory inputDir outputDir = do
+convertDirectory :: Env -> FilePath -> FilePath -> IO ()
+convertDirectory env inputDir outputDir = do
   DirContents filesToProcess filesToCopy <- getDirFilesAndContent inputDir
   createOutputDirectoryOrExit outputDir
-  let outputHtmls = txtsToRenderedHtml filesToProcess
+  let outputHtmls = runReader (txtsToRenderedHtml filesToProcess) env
   copyFiles outputDir filesToCopy
   writeFiles outputDir outputHtmls
   putStrLn "Done."
@@ -76,47 +76,51 @@ data DirContents = DirContents
 
 -- * Build index page
 
-buildIndex :: Env -> [(FilePath, Markup.Document)] -> Html.Html
-buildIndex env files =
+buildIndex :: [(FilePath, Markup.Document)] -> Reader Env Html.Html
+buildIndex files = do
+  env <- ask
   let previews =
         map
           ( \(file, doc) ->
               case doc of
-                Markup.Head 1 head : article ->
-                  Html.h_ 3 (Html.link_ file (Html.txt_ head))
+                Markup.Heading 1 heading : article ->
+                  Html.h_ 3 (Html.link_ file (Html.txt_ heading))
                     <> foldMap convertStructure (take 2 article)
                     <> Html.p_ (Html.link_ file (Html.txt_ "..."))
                 _ ->
                   Html.h_ 3 (Html.link_ file (Html.txt_ file))
           )
           files
-   in Html.html_
-        ( Html.title_ (eBlogName env)
-            <> Html.stylesheet_ (eStylesheetPath env)
-        )
-        ( Html.h_ 1 (Html.link_ "index.html" (Html.txt_ "Blog"))
-            <> Html.h_ 2 (Html.txt_ "Posts")
-            <> mconcat previews
-        )
+  pure $
+    Html.html_
+      ( Html.title_ (eBlogName env)
+          <> Html.stylesheet_ (eStylesheetPath env)
+      )
+      ( Html.h_ 1 (Html.link_ "index.html" (Html.txt_ "Blog"))
+          <> Html.h_ 2 (Html.txt_ "Posts")
+          <> mconcat previews
+      )
 
 ------------------------------------
 
 -- * Conversion
 
 -- | Convert text files to Markup, build an index, and render as html.
-txtsToRenderedHtml :: [(FilePath, String)] -> [(FilePath, String)]
-txtsToRenderedHtml txtFiles =
+txtsToRenderedHtml :: [(FilePath, String)] -> Reader Env [(FilePath, String)]
+txtsToRenderedHtml txtFiles = do
   let txtOutputFiles = map toOutputMarkupFile txtFiles
-      index = ("index.html", buildIndex txtOutputFiles)
-   in map (fmap Html.render) (index : map convertFile txtOutputFiles)
+  index <- (,) "index.html" <$> buildIndex txtOutputFiles
+  htmlPages <- traverse convertFile txtOutputFiles
+  pure $ map (fmap Html.render) (index : htmlPages)
 
 toOutputMarkupFile :: (FilePath, String) -> (FilePath, Markup.Document)
-
-tOutputMarkupFile (file, content) =
+toOutputMarkupFile (file, content) =
   (takeBaseName file <.> "html", Markup.parse content)
 
-convertFile :: (FilePath, Markup.Document) -> (FilePath, Html.Html)
-convertFile (file, doc) = (file, convert file doc)
+convertFile :: (FilePath, Markup.Document) -> Reader Env (FilePath, Html.Html)
+convertFile (file, doc) = do
+  env <- ask
+  pure (file, convert env (takeBaseName file) doc)
 
 ------------------------------------
 
@@ -163,15 +167,15 @@ writeFiles outputDir files = do
 
 -- | Try to apply an IO function on a list of values, document successes and failures
 applyIoOnList :: (a -> IO b) -> [a] -> IO [(a, Either String b)]
-applyIoOnList action inputs = do
-  for inputs $ \input -> do
-    maybeResult <-
+applyIoOnList action files = do
+  for files $ \file -> do
+    maybeContent <-
       catch
-        (Right <$> action input)
+        (Right <$> action file)
         ( \(SomeException e) -> do
             pure $ Left (displayException e)
         )
-    pure (input, maybeResult)
+    pure (file, maybeContent)
 
 -- | Filter out unsuccessful operations on files and report errors to stderr.
 filterAndReportFailures :: [(a, Either String b)] -> IO [(a, b)]
